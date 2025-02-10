@@ -1,0 +1,30 @@
+body {
+  margin: 0;
+  padding: 0;
+  background-color: black;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  padding: 10px 20px;
+  font-size: 16px;
+  border-radius: 5px;
+  margin: 5px;
+}
+
+.pink-button {
+  background-color: pink;
+  color: black;
+}
+
+.green-button {
+  background-color: lightgreen;
+  color: black;
+}
+
+.blue-text {
+  color: cyan;
+}
