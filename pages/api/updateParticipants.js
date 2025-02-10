@@ -8,17 +8,17 @@ export default async function handler(req, res) {
   
   const { round, participant, totalBet } = req.body;
   
-  // Informasi repository GitHub (atur melalui environment variables di Vercel)
-  const owner = process.env.GITHUB_OWNER; // misal: username GitHub kamu
-  const repo = process.env.GITHUB_REPO;   // misal: nama repo, contoh: social-luck-data
-  const filePath = "participants.json";   // nama file penyimpanan data peserta
+  // Informasi repository GitHub dari environment variables
+  const owner = process.env.GITHUB_OWNER;
+  const repo = process.env.GITHUB_REPO;
+  const filePath = "participants.json";
   
   const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN, // Personal Access Token GitHub (atur di env Vercel)
+    auth: process.env.GITHUB_TOKEN,
   });
   
   try {
-    // Ambil isi file saat ini (jika sudah ada)
+    // Ambil isi file jika sudah ada, atau buat data baru
     let currentData = { rounds: [] };
     try {
       const { data } = await octokit.repos.getContent({
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       const content = Buffer.from(data.content, 'base64').toString();
       currentData = JSON.parse(content);
     } catch (error) {
-      console.log("File does not exist, creating a new one.");
+      console.log("participants.json does not exist, creating new file.");
     }
     
     // Update data untuk round saat ini
@@ -41,7 +41,6 @@ export default async function handler(req, res) {
     roundData.participants.push(participant);
     roundData.totalBet = totalBet;
     
-    // Siapkan konten file yang diperbarui (dalam base64)
     const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
     
     // Dapatkan SHA file jika sudah ada
