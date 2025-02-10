@@ -8,17 +8,16 @@ export default async function handler(req, res) {
   
   const { round, winner, prize } = req.body;
   
-  // Informasi repository GitHub
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "winners.json";   // nama file penyimpanan data pemenang
+  const filePath = "winners.json";
   
   const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN,
   });
   
   try {
-    // Ambil isi file saat ini (jika ada)
+    // Ambil isi file jika sudah ada, atau buat data baru
     let currentData = { rounds: [] };
     try {
       const { data } = await octokit.repos.getContent({
@@ -29,7 +28,7 @@ export default async function handler(req, res) {
       const content = Buffer.from(data.content, 'base64').toString();
       currentData = JSON.parse(content);
     } catch (error) {
-      console.log("File does not exist, creating a new one.");
+      console.log("winners.json does not exist, creating new file.");
     }
     
     // Tambahkan data round baru
