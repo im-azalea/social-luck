@@ -17,7 +17,6 @@ export default async function handler(req, res) {
   });
   
   try {
-    // Ambil isi file jika sudah ada, atau buat data baru
     let currentData = { rounds: [] };
     try {
       const { data } = await octokit.repos.getContent({
@@ -31,7 +30,6 @@ export default async function handler(req, res) {
       console.log("winners.json does not exist, creating new file.");
     }
     
-    // Tambahkan data round baru
     currentData.rounds.push({ round, winner, prize });
     
     const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
