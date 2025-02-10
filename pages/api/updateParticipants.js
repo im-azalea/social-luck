@@ -6,14 +6,20 @@ export default async function handler(req, res) {
     return;
   }
   
-  const { round, participant, totalBet } = req.body;
+  const { participant, totalBet } = req.body;
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "participants.json";
-  
+  const filePath = "lottery.json";
   const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
   
-  let currentData = { rounds: [] };
+  let lotteryData = {
+    currentRound: 1,
+    participants: [],
+    totalBet: 0,
+    startTime: Date.now(),
+    winner: null
+  };
+  
   try {
     const { data } = await octokit.repos.getContent({
       owner,
@@ -21,25 +27,19 @@ export default async function handler(req, res) {
       path: filePath,
     });
     const content = Buffer.from(data.content, 'base64').toString();
-    currentData = JSON.parse(content);
+    lotteryData = JSON.parse(content);
   } catch (error) {
-    console.log("participants.json does not exist, creating new file.");
+    console.log("lottery.json tidak ditemukan. Inisialisasi data baru.");
   }
   
-  let roundData = currentData.rounds.find(r => r.round === round);
-  if (!roundData) {
-    roundData = { round, participants: [], totalBet: 0, startTime: Date.now() };
-    currentData.rounds.push(roundData);
-  }
-  
-  if (roundData.participants.includes(participant)) {
+  if (lotteryData.participants.includes(participant)) {
     return res.status(400).json({ error: "Participant already joined this round." });
   }
   
-  roundData.participants.push(participant);
-  roundData.totalBet = totalBet;
+  lotteryData.participants.push(participant);
+  lotteryData.totalBet = totalBet;
   
-  const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
+  const updatedContent = Buffer.from(JSON.stringify(lotteryData, null, 2)).toString('base64');
   
   let sha;
   try {
@@ -58,13 +58,13 @@ export default async function handler(req, res) {
       owner,
       repo,
       path: filePath,
-      message: `Update participants for round ${round}`,
+      message: `Update lottery data for round ${lotteryData.currentRound}`,
       content: updatedContent,
       sha,
     });
-    res.status(200).json({ message: "Participants updated." });
+    res.status(200).json({ message: "Lottery data updated." });
   } catch (error) {
     console.error("GitHub API error:", error);
-    res.status(500).json({ error: "Failed to update participants." });
+    res.status(500).json({ error: "Failed to update lottery data." });
   }
 }
