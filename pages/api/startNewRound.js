@@ -7,10 +7,17 @@ export default async function handler(req, res) {
   }
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "participants.json";
-  
+  const filePath = "lottery.json";
   const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-  let currentData = { rounds: [] };
+  
+  let lotteryData = {
+    currentRound: 1,
+    participants: [],
+    totalBet: 0,
+    startTime: Date.now(),
+    winner: null
+  };
+  
   try {
     const { data } = await octokit.repos.getContent({
       owner,
@@ -18,26 +25,19 @@ export default async function handler(req, res) {
       path: filePath,
     });
     const content = Buffer.from(data.content, 'base64').toString();
-    currentData = JSON.parse(content);
+    lotteryData = JSON.parse(content);
   } catch (error) {
-    console.log("participants.json does not exist, creating new file.");
+    console.log("lottery.json tidak ditemukan. Inisialisasi data baru.");
   }
   
-  let currentRound = 0;
-  if (currentData.rounds && currentData.rounds.length > 0) {
-    currentRound = Math.max(...currentData.rounds.map(r => r.round));
-  }
+  // Mulai round baru: increment round, reset peserta, totalBet, winner, dan perbarui startTime
+  lotteryData.currentRound = lotteryData.currentRound + 1;
+  lotteryData.participants = [];
+  lotteryData.totalBet = 0;
+  lotteryData.winner = null;
+  lotteryData.startTime = Date.now();
   
-  const newRound = currentRound + 1;
-  const newRoundEntry = {
-    round: newRound,
-    participants: [],
-    totalBet: 0,
-    startTime: Date.now()
-  };
-  currentData.rounds.push(newRoundEntry);
-  
-  const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
+  const updatedContent = Buffer.from(JSON.stringify(lotteryData, null, 2)).toString('base64');
   
   let sha;
   try {
@@ -56,11 +56,11 @@ export default async function handler(req, res) {
       owner,
       repo,
       path: filePath,
-      message: `Start new round ${newRound}`,
+      message: `Start new round ${lotteryData.currentRound}`,
       content: updatedContent,
       sha,
     });
-    res.status(200).json({ message: "New round started", round: newRound, startTime: newRoundEntry.startTime });
+    res.status(200).json(lotteryData);
   } catch (error) {
     console.error("GitHub API error:", error);
     res.status(500).json({ error: "Failed to start new round." });
