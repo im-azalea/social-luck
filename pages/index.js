@@ -6,9 +6,8 @@ import WalletConnectProvider from "@walletconnect/ethereum-provider";
 const SOCIAL_TOKEN_ADDRESS = "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
 const DEVELOPER_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
 const TICKET_COST = 10; // Untuk uji coba; ubah ke 500 untuk produksi
-const ROUND_DURATION = 3600; // dalam detik (1 jam)
+const ROUND_DURATION = 3600; // 1 jam dalam detik
 
-// ABI minimal ERC-20
 const SOCIAL_TOKEN_ABI = [
   "function transfer(address to, uint amount) public returns (bool)",
   "function decimals() view returns (uint8)"
@@ -18,28 +17,28 @@ export default function Home() {
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState("");
+  // lotteryData menyimpan data round secara persistent
+  const [lotteryData, setLotteryData] = useState({
+    currentRound: 1,
+    participants: [],
+    totalBet: 0,
+    startTime: Date.now(),
+    winner: null,
+  });
   const [joined, setJoined] = useState(false);
-  const [participants, setParticipants] = useState([]);
-  const [totalBet, setTotalBet] = useState(0);
-  const [currentRound, setCurrentRound] = useState(1);
-  const [startTime, setStartTime] = useState(Date.now());
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
-  const [winner, setWinner] = useState(null);
-  
   const timerRef = useRef(null);
-  
-  // Ambil data lottery dari GitHub (data persistent)
+
+  // Mengambil data lottery dari API (/api/getLotteryData)
   const fetchLotteryData = async () => {
     try {
       const res = await fetch('/api/getLotteryData');
       const data = await res.json();
-      setCurrentRound(data.currentRound);
-      setParticipants(data.participants);
-      setTotalBet(data.totalBet);
-      setStartTime(data.startTime);
-      setWinner(data.winner);
-      
-      // Jika wallet sudah terhubung, periksa apakah sudah ikut
+      setLotteryData(data);
+      const now = Date.now();
+      const elapsed = Math.floor((now - data.startTime) / 1000);
+      const remaining = ROUND_DURATION - elapsed;
+      setTimeLeft(remaining > 0 ? remaining : 0);
       if (account && data.participants.includes(account)) {
         setJoined(true);
       }
@@ -52,31 +51,31 @@ export default function Home() {
     fetchLotteryData();
   }, [account]);
 
-  // Update timer setiap detik berdasarkan startTime yang tersimpan
+  // Timer: hitung sisa waktu berdasarkan startTime yang tersimpan
   useEffect(() => {
     const updateTimer = () => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const now = Date.now();
+      const elapsed = Math.floor((now - lotteryData.startTime) / 1000);
       const remaining = ROUND_DURATION - elapsed;
       setTimeLeft(remaining > 0 ? remaining : 0);
-      if (remaining <= 0 && !winner) {
-        // Jika round sudah habis dan belum ada pemenang, lakukan draw
+      if (remaining <= 0 && !lotteryData.winner) {
+        // Jika waktu habis dan belum ada pemenang, lakukan draw
         drawWinner();
       }
     };
-    
+
     updateTimer();
     timerRef.current = setInterval(updateTimer, 1000);
-    
     return () => clearInterval(timerRef.current);
-  }, [startTime, winner]);
+  }, [lotteryData]);
 
-  // Fungsi untuk koneksi wallet via WalletConnect
+  // Fungsi connect wallet via WalletConnect
   const connectWallet = async () => {
     try {
       console.log("Connect wallet clicked");
       const wcProvider = await WalletConnectProvider.init({
         projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID,
-        chains: [8453], // Pastikan chain ID ini sesuai
+        chains: [8453],
         showQrModal: true,
       });
       await wcProvider.connect();
@@ -93,13 +92,13 @@ export default function Home() {
     }
   };
 
-  // Fungsi untuk join lottery (beli tiket)
+  // Fungsi join lottery (beli tiket)
   const joinLottery = async () => {
     if (!provider || !signer) {
       alert("Please connect your wallet first.");
       return;
     }
-    if (participants.includes(account)) {
+    if (lotteryData.participants.includes(account)) {
       alert("You have already joined this round.");
       return;
     }
@@ -110,23 +109,19 @@ export default function Home() {
       const tx = await tokenContract.transfer(DEVELOPER_WALLET, amount);
       await tx.wait();
       
-      const newTotalBet = totalBet + TICKET_COST;
-      setTotalBet(newTotalBet);
-      const newParticipants = [...participants, account];
-      setParticipants(newParticipants);
-      setJoined(true);
-      alert("Ticket purchased successfully!");
-      
-      // Update data peserta secara persistent via API
+      const newTotalBet = lotteryData.totalBet + TICKET_COST;
+      // Update peserta dan totalBet secara persistent melalui API
       await fetch('/api/updateParticipants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          round: currentRound,
           participant: account,
           totalBet: newTotalBet
         })
       });
+      fetchLotteryData();
+      setJoined(true);
+      alert("Ticket purchased successfully!");
     } catch (error) {
       console.error("Error joining lottery:", error);
       alert("Transaction failed: " + error.message);
@@ -135,29 +130,28 @@ export default function Home() {
 
   // Fungsi draw pemenang secara acak
   const drawWinner = async () => {
-    if (participants.length === 0) {
+    if (lotteryData.participants.length === 0) {
       alert("No participants in this round.");
       return;
     }
-    const randomIndex = Math.floor(Math.random() * participants.length);
-    const selectedWinner = participants[randomIndex];
-    setWinner(selectedWinner);
-    // Update data pemenang secara persistent via API
+    const randomIndex = Math.floor(Math.random() * lotteryData.participants.length);
+    const selectedWinner = lotteryData.participants[randomIndex];
+    // Update winner secara persistent melalui API
     await fetch('/api/updateWinner', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        round: currentRound,
         winner: selectedWinner,
-        prize: totalBet * 0.95
+        prize: lotteryData.totalBet * 0.95
       })
     });
-    alert("Round " + currentRound + " draw complete. Winner: " + selectedWinner);
+    fetchLotteryData();
+    alert("Round " + lotteryData.currentRound + " draw complete. Winner: " + selectedWinner);
   };
 
-  // Fungsi klaim hadiah (simulasi)
+  // Fungsi claim hadiah (simulasi)
   const claimPrize = () => {
-    if (account !== winner) {
+    if (account !== lotteryData.winner) {
       alert("You did not win this round.");
       return;
     }
@@ -181,33 +175,22 @@ export default function Home() {
     }
   };
 
-  // Fungsi untuk memulai round baru secara persistent
+  // Fungsi untuk memulai round baru (dijalankan setelah round selesai)
   const startNewRound = async () => {
-    try {
-      const res = await fetch('/api/startNewRound', { method: 'POST' });
-      const data = await res.json();
-      setCurrentRound(data.round);
-      setParticipants([]);
-      setTotalBet(0);
-      setJoined(false);
-      setWinner(null);
-      setStartTime(data.startTime);
-      setTimeLeft(ROUND_DURATION);
-    } catch (error) {
-      console.error("Error starting new round:", error);
-    }
+    await fetch('/api/startNewRound', { method: 'POST' });
+    fetchLotteryData();
+    setJoined(false);
   };
 
-  // Ketika waktu habis dan pemenang sudah ada, mulai round baru setelah delay
+  // Jika waktu habis dan winner sudah ada, setelah 10 detik mulai round baru
   useEffect(() => {
-    if (timeLeft <= 0 && winner) {
+    if (timeLeft <= 0 && lotteryData.winner) {
       setTimeout(() => {
         startNewRound();
       }, 10000);
     }
-  }, [timeLeft, winner]);
+  }, [timeLeft, lotteryData.winner]);
 
-  // Fungsi format waktu ke hh:mm:ss
   const formatTime = (seconds) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
     const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
@@ -224,20 +207,20 @@ export default function Home() {
         <p>Connected: {account}</p>
       )}
 
-      <h2>Round: {currentRound}</h2>
-      <p>Total Bet: {totalBet} tokens</p>
+      <h2>Round: {lotteryData.currentRound}</h2>
+      <p>Total Bet: {lotteryData.totalBet} tokens</p>
       <p className="blue-text">Time Left: {formatTime(timeLeft)}</p>
 
-      { !participants.includes(account) ? (
+      {!lotteryData.participants.includes(account) ? (
         <button className="pink-button" onClick={joinLottery}>Play (Join Lottery)</button>
       ) : (
         <button className="green-button" disabled>You have joined</button>
       )}
 
-      {winner && (
+      {lotteryData.winner && (
         <div>
-          <h3>Winner of Round {currentRound}: {winner}</h3>
-          <p>Prize: {totalBet * 0.95} tokens</p>
+          <h3>Winner of Round {lotteryData.currentRound}: {lotteryData.winner}</h3>
+          <p>Prize: {lotteryData.totalBet * 0.95} tokens</p>
         </div>
       )}
 
