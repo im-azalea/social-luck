@@ -3,51 +3,43 @@ import { Octokit } from "@octokit/rest";
 export default async function handler(req, res) {
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
+  const filePath = "lottery.json";
+  const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
   
-  // Ambil file participants.json dari GitHub
-  let participantsData = { rounds: [] };
+  // Default lottery data
+  let lotteryData = {
+    currentRound: 1,
+    participants: [],
+    totalBet: 0,
+    startTime: Date.now(),
+    winner: null
+  };
+  
   try {
-    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
     const { data } = await octokit.repos.getContent({
-      owner, repo, path: "participants.json"
+      owner,
+      repo,
+      path: filePath,
     });
     const content = Buffer.from(data.content, 'base64').toString();
-    participantsData = JSON.parse(content);
+    lotteryData = JSON.parse(content);
   } catch (error) {
-    console.log("Error fetching participants.json", error);
+    console.log("lottery.json tidak ditemukan. Inisialisasi data baru.");
+    // Jika file belum ada, buat file baru dengan data default
+    try {
+      const initialData = lotteryData;
+      const updatedContent = Buffer.from(JSON.stringify(initialData, null, 2)).toString('base64');
+      await octokit.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path: filePath,
+        message: "Initialize lottery data",
+        content: updatedContent,
+      });
+    } catch (err) {
+      console.error("Error initializing lottery data:", err);
+    }
   }
   
-  // Ambil file winners.json dari GitHub
-  let winnersData = { rounds: [] };
-  try {
-    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-    const { data } = await octokit.repos.getContent({
-      owner, repo, path: "winners.json"
-    });
-    const content = Buffer.from(data.content, 'base64').toString();
-    winnersData = JSON.parse(content);
-  } catch (error) {
-    console.log("Error fetching winners.json", error);
-  }
-  
-  // Tentukan round saat ini dari file participants.json
-  let currentRoundEntry = null;
-  if (participantsData.rounds && participantsData.rounds.length > 0) {
-    currentRoundEntry = participantsData.rounds.reduce((prev, curr) => (curr.round > prev.round ? curr : prev), participantsData.rounds[0]);
-  }
-  
-  // Cari informasi pemenang untuk round saat ini dari winners.json
-  let winnerInfo = null;
-  if (winnersData.rounds && winnersData.rounds.length > 0 && currentRoundEntry) {
-    winnerInfo = winnersData.rounds.find(r => r.round === currentRoundEntry.round);
-  }
-  
-  res.status(200).json({
-    currentRound: currentRoundEntry ? currentRoundEntry.round : 1,
-    participants: currentRoundEntry ? currentRoundEntry.participants : [],
-    totalBet: currentRoundEntry ? currentRoundEntry.totalBet : 0,
-    startTime: currentRoundEntry ? currentRoundEntry.startTime : Date.now(),
-    winner: winnerInfo ? winnerInfo.winner : null,
-    prize: winnerInfo ? winnerInfo.prize : null,
-  });
+  res.status(200).json(lotteryData);
 }
