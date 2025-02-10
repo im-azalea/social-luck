@@ -7,51 +7,53 @@ export default async function handler(req, res) {
   }
   
   const { round, participant, totalBet } = req.body;
-  
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
   const filePath = "participants.json";
   
-  const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN,
-  });
+  const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+  
+  let currentData = { rounds: [] };
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: filePath,
+    });
+    const content = Buffer.from(data.content, 'base64').toString();
+    currentData = JSON.parse(content);
+  } catch (error) {
+    console.log("participants.json does not exist, creating new file.");
+  }
+  
+  let roundData = currentData.rounds.find(r => r.round === round);
+  if (!roundData) {
+    roundData = { round, participants: [], totalBet: 0, startTime: Date.now() };
+    currentData.rounds.push(roundData);
+  }
+  
+  if (roundData.participants.includes(participant)) {
+    return res.status(400).json({ error: "Participant already joined this round." });
+  }
+  
+  roundData.participants.push(participant);
+  roundData.totalBet = totalBet;
+  
+  const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
+  
+  let sha;
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: filePath,
+    });
+    sha = data.sha;
+  } catch (error) {
+    sha = undefined;
+  }
   
   try {
-    let currentData = { rounds: [] };
-    try {
-      const { data } = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: filePath,
-      });
-      const content = Buffer.from(data.content, 'base64').toString();
-      currentData = JSON.parse(content);
-    } catch (error) {
-      console.log("participants.json does not exist, creating new file.");
-    }
-    
-    let roundData = currentData.rounds.find(r => r.round === round);
-    if (!roundData) {
-      roundData = { round, participants: [], totalBet: 0 };
-      currentData.rounds.push(roundData);
-    }
-    roundData.participants.push(participant);
-    roundData.totalBet = totalBet;
-    
-    const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
-    
-    let sha;
-    try {
-      const { data } = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: filePath,
-      });
-      sha = data.sha;
-    } catch (error) {
-      sha = undefined;
-    }
-    
     await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
@@ -60,7 +62,6 @@ export default async function handler(req, res) {
       content: updatedContent,
       sha,
     });
-    
     res.status(200).json({ message: "Participants updated." });
   } catch (error) {
     console.error("GitHub API error:", error);
