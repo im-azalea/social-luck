@@ -5,8 +5,8 @@ import WalletConnectProvider from "@walletconnect/ethereum-provider";
 // KONSTANTA
 const SOCIAL_TOKEN_ADDRESS = "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb";
 const DEVELOPER_WALLET = "0x09afd8049c4a0eE208105f806195A5b52F1EC950";
-const TICKET_COST = 10; // Uji coba: 10 token; ubah ke 500 untuk produksi
-const ROUND_DURATION = 3600; // durasi round: 3600 detik (1 jam)
+const TICKET_COST = 10; // Untuk uji coba: 10 token (ubah ke 500 untuk produksi)
+const ROUND_DURATION = 3600; // Durasi round: 3600 detik (1 jam)
 
 // ABI minimal ERC-20
 const SOCIAL_TOKEN_ABI = [
@@ -31,8 +31,8 @@ export default function Home() {
     try {
       console.log("Connect wallet clicked");
       const wcProvider = await WalletConnectProvider.init({
-        projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID || "YOUR_PROJECT_ID", // Ganti dengan Project ID kamu
-        chains: [8453],
+        projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID,
+        chains: [8453], // Pastikan chain ID ini sesuai dengan jaringan yang digunakan
         showQrModal: true,
       });
       await wcProvider.connect();
