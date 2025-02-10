@@ -8,7 +8,6 @@ export default async function handler(req, res) {
   
   const { round, participant, totalBet } = req.body;
   
-  // Informasi repository GitHub dari environment variables
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
   const filePath = "participants.json";
@@ -18,7 +17,6 @@ export default async function handler(req, res) {
   });
   
   try {
-    // Ambil isi file jika sudah ada, atau buat data baru
     let currentData = { rounds: [] };
     try {
       const { data } = await octokit.repos.getContent({
@@ -32,7 +30,6 @@ export default async function handler(req, res) {
       console.log("participants.json does not exist, creating new file.");
     }
     
-    // Update data untuk round saat ini
     let roundData = currentData.rounds.find(r => r.round === round);
     if (!roundData) {
       roundData = { round, participants: [], totalBet: 0 };
@@ -43,7 +40,6 @@ export default async function handler(req, res) {
     
     const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
     
-    // Dapatkan SHA file jika sudah ada
     let sha;
     try {
       const { data } = await octokit.repos.getContent({
