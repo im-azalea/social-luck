@@ -6,14 +6,20 @@ export default async function handler(req, res) {
     return;
   }
   
-  const { round, winner, prize } = req.body;
+  const { winner, prize } = req.body;
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
-  const filePath = "winners.json";
-  
+  const filePath = "lottery.json";
   const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
   
-  let currentData = { rounds: [] };
+  let lotteryData = {
+    currentRound: 1,
+    participants: [],
+    totalBet: 0,
+    startTime: Date.now(),
+    winner: null
+  };
+  
   try {
     const { data } = await octokit.repos.getContent({
       owner,
@@ -21,14 +27,14 @@ export default async function handler(req, res) {
       path: filePath,
     });
     const content = Buffer.from(data.content, 'base64').toString();
-    currentData = JSON.parse(content);
+    lotteryData = JSON.parse(content);
   } catch (error) {
-    console.log("winners.json does not exist, creating new file.");
+    console.log("lottery.json tidak ditemukan. Inisialisasi data baru.");
   }
   
-  currentData.rounds.push({ round, winner, prize });
+  lotteryData.winner = winner;
   
-  const updatedContent = Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64');
+  const updatedContent = Buffer.from(JSON.stringify(lotteryData, null, 2)).toString('base64');
   
   let sha;
   try {
@@ -47,7 +53,7 @@ export default async function handler(req, res) {
       owner,
       repo,
       path: filePath,
-      message: `Update winner for round ${round}`,
+      message: `Update winner for round ${lotteryData.currentRound}`,
       content: updatedContent,
       sha,
     });
