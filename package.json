@@ -1,6 +1,7 @@
 {
-  "name": "social-luck",
-  "version": "1.0.0",
+  "name": "social-lottery",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,9 +10,6 @@
   "dependencies": {
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest",
-    "ethers": "^6.0.0",
-    "@walletconnect/ethereum-provider": "^2.0.0",
-    "@octokit/rest": "^19.0.0"
+    "react-dom": "latest"
   }
 }
