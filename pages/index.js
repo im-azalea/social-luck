@@ -15,30 +15,16 @@ const lotteryABI = [
 ]
 
 export default function Home() {
+  // State untuk manajemen peserta dan round
   const [joined, setJoined] = useState(false)
   const [totalBet, setTotalBet] = useState(0)
   const [currentRound, setCurrentRound] = useState(1)
-  const [timer, setTimer] = useState('00:00:00')
+  const [timer, setTimer] = useState('00:00')
   const [winnerInfo, setWinnerInfo] = useState({ address: '', amount: 0 })
   const [walletAddress, setWalletAddress] = useState('')
   const [provider, setProvider] = useState(null)
-
-  // Timer round: simulasi countdown 1 jam (3600 detik)
-  useEffect(() => {
-    let timeLeft = 3600 // 1 jam = 3600 detik
-    const interval = setInterval(() => {
-      if (timeLeft >= 0) {
-        const hours = String(Math.floor(timeLeft / 3600)).padStart(2, '0')
-        const minutes = String(Math.floor((timeLeft % 3600) / 60)).padStart(2, '0')
-        const seconds = String(timeLeft % 60).padStart(2, '0')
-        setTimer(`${hours}:${minutes}:${seconds}`)
-        timeLeft--
-      } else {
-        clearInterval(interval)
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [currentRound])
+  const [participants, setParticipants] = useState([]) // Array peserta round saat ini
+  const [lastDrawnRound, setLastDrawnRound] = useState(0) // Round terakhir yang sudah di-draw
 
   // Fungsi untuk menghubungkan wallet menggunakan WalletConnect v2
   const connectWallet = async () => {
@@ -51,13 +37,10 @@ export default function Home() {
         },
         showQrModal: true,
       })
-
       await wcProvider.connect()
-
       const ethersProvider = new ethers.providers.Web3Provider(wcProvider)
       const signer = ethersProvider.getSigner()
       const address = await signer.getAddress()
-
       setWalletAddress(address)
       setProvider(ethersProvider)
     } catch (error) {
@@ -87,6 +70,13 @@ export default function Home() {
         await tx.wait()
         alert("Ticket purchased successfully!")
         setJoined(true)
+        // Tambahkan peserta jika belum ada
+        setParticipants(prev => {
+          if (!prev.includes(walletAddress)) {
+            return [...prev, walletAddress]
+          }
+          return prev
+        })
         setTotalBet(prev => prev + 10)
       } catch (error) {
         console.error("Ticket purchase failed:", error)
@@ -101,17 +91,13 @@ export default function Home() {
       alert("Please connect your wallet first.")
       return
     }
-    // Simulasi: cek apakah wallet yang terhubung adalah pemenang
-    if (joined && winnerInfo.address.toLowerCase() === walletAddress.toLowerCase()) {
+    // Simulasi: jika wallet yang terhubung adalah pemenang
+    if (joined && winnerInfo.address && winnerInfo.address.toLowerCase() === walletAddress.toLowerCase()) {
       try {
         const signer = provider.getSigner()
         // Ganti dengan alamat Lottery Contract yang sesungguhnya jika sudah ada
         const lotteryContractAddress = "0xYourLotteryContractAddress"
-        const lotteryContract = new ethers.Contract(
-          lotteryContractAddress,
-          lotteryABI,
-          signer
-        )
+        const lotteryContract = new ethers.Contract(lotteryContractAddress, lotteryABI, signer)
         const tx = await lotteryContract.claimPrize()
         await tx.wait()
         alert("Claim successful! Congratulations!")
@@ -131,16 +117,53 @@ export default function Home() {
       text: 'Join the SOCIAL lottery! Check it out!',
       url: window.location.href,
     }
-
     if (navigator.share) {
       navigator.share(shareData)
         .then(() => console.log('Shared successfully'))
         .catch(console.error)
     } else {
+      // Fallback: salin link ke clipboard
       navigator.clipboard.writeText(`${shareData.text} ${shareData.url} (Nick: @azalea)`)
       alert('Link copied to clipboard!')
     }
   }
+
+  // Effect untuk mengelola timer round dan draw otomatis
+  useEffect(() => {
+    // Tetapkan waktu deploy secara tetap. Di produksi, sebaiknya gunakan nilai terpusat (misalnya, dari server).
+    const DEPLOY_TIME = new Date("2025-02-11T00:00:00Z").getTime()
+    const interval = setInterval(() => {
+      const now = Date.now()
+      const elapsed = Math.floor((now - DEPLOY_TIME) / 1000) // total detik sejak deploy
+      const computedRound = Math.floor(elapsed / 3600) + 1 // tiap 3600 detik = 1 round
+      const roundElapsed = elapsed % 3600
+      const roundTimeLeft = 3600 - roundElapsed
+      setCurrentRound(computedRound)
+      // Format timer sebagai mm:ss
+      const minutes = String(Math.floor(roundTimeLeft / 60)).padStart(2, '0')
+      const seconds = String(roundTimeLeft % 60).padStart(2, '0')
+      setTimer(`${minutes}:${seconds}`)
+
+      // Jika round baru saja dimulai (roundElapsed === 0) dan round sebelumnya belum di-draw
+      if (roundElapsed === 0 && computedRound - 1 > lastDrawnRound) {
+        // Lakukan draw untuk round sebelumnya (computedRound - 1)
+        if (participants.length > 0) {
+          const randomIndex = Math.floor(Math.random() * participants.length)
+          const winner = participants[randomIndex]
+          const prizeAmount = totalBet * 0.95 // 95% dari total taruhan
+          setWinnerInfo({ address: winner, amount: prizeAmount })
+        } else {
+          setWinnerInfo({ address: 'No participants', amount: 0 })
+        }
+        // Reset data untuk round baru
+        setParticipants([])
+        setTotalBet(0)
+        setJoined(false)
+        setLastDrawnRound(computedRound - 1)
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [lastDrawnRound, participants, totalBet])
 
   return (
     <div className="container">
@@ -173,7 +196,16 @@ export default function Home() {
             You have joined this round
           </button>
         )}
-        <button className="claim-button" onClick={handleClaim}>
+        <button 
+          className={
+            walletAddress &&
+            winnerInfo.address &&
+            winnerInfo.address.toLowerCase() === walletAddress.toLowerCase()
+              ? "claim-button-winner"
+              : "claim-button-non-winner"
+          }
+          onClick={handleClaim}
+        >
           Claim Prize
         </button>
         <button className="share-button" onClick={handleShare}>
@@ -212,7 +244,7 @@ export default function Home() {
           gap: 1rem;
         }
         .connect-button {
-          background-color: #ffa500; /* Orange untuk Connect Wallet */
+          background-color: #ffa500; /* Orange */
           border: none;
           padding: 0.8rem 1.2rem;
           color: #fff;
@@ -238,8 +270,17 @@ export default function Home() {
           font-size: 1rem;
           border-radius: 8px;
         }
-        .claim-button {
-          background-color: #32cd32; /* Hijau */
+        .claim-button-winner {
+          background-color: #32cd32; /* Hijau untuk pemenang */
+          border: none;
+          padding: 1rem 2rem;
+          color: #fff;
+          font-size: 1rem;
+          cursor: pointer;
+          border-radius: 8px;
+        }
+        .claim-button-non-winner {
+          background-color: #ff0000; /* Merah untuk non-pemenang */
           border: none;
           padding: 1rem 2rem;
           color: #fff;
