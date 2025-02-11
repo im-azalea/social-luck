@@ -3,6 +3,17 @@ import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import WalletConnectProvider from "@walletconnect/ethereum-provider"
 
+// Minimal ERC20 ABI untuk interaksi dengan token $SOCIAL
+const tokenABI = [
+  "function transfer(address to, uint256 amount) public returns (bool)",
+  "function balanceOf(address account) external view returns (uint256)"
+]
+
+// Dummy Lottery Contract ABI untuk klaim hadiah (ganti dengan ABI asli saat sudah ada smart contract-nya)
+const lotteryABI = [
+  "function claimPrize() public"
+]
+
 export default function Home() {
   const [joined, setJoined] = useState(false)
   const [totalBet, setTotalBet] = useState(0)
@@ -12,7 +23,7 @@ export default function Home() {
   const [walletAddress, setWalletAddress] = useState('')
   const [provider, setProvider] = useState(null)
 
-  // Simulasi timer round: countdown 1 jam (3600 detik)
+  // Timer round: simulasi countdown 1 jam (3600 detik)
   useEffect(() => {
     let timeLeft = 3600 // 1 jam = 3600 detik
     const interval = setInterval(() => {
@@ -32,20 +43,17 @@ export default function Home() {
   // Fungsi untuk menghubungkan wallet menggunakan WalletConnect v2
   const connectWallet = async () => {
     try {
-      // Inisialisasi WalletConnect Provider
       const wcProvider = await WalletConnectProvider.init({
-        projectId: "ec3a4a130bfbfcd23c9e540a8e99e718", // Ganti dengan Project ID WalletConnect milikmu
-        chains: [8453], // Gunakan chain ID Base network (8453 untuk Base mainnet; sesuaikan jika menggunakan testnet)
+        projectId: "ec3a4a130bfbfcd23c9e540a8e99e718", // Ganti dengan WalletConnect Project ID milikmu
+        chains: [8453], // Gunakan chain ID Base network (8453 untuk Base mainnet; sesuaikan jika memakai testnet)
         rpcMap: {
           8453: "https://mainnet.base.org" // RPC URL untuk Base network; sesuaikan jika perlu
         },
         showQrModal: true,
       })
 
-      // Memulai koneksi ke wallet
       await wcProvider.connect()
 
-      // Buat instance ethers provider dan dapatkan alamat wallet
       const ethersProvider = new ethers.providers.Web3Provider(wcProvider)
       const signer = ethersProvider.getSigner()
       const address = await signer.getAddress()
@@ -58,46 +66,65 @@ export default function Home() {
     }
   }
 
-  // Fungsi untuk tombol "Play" (Beli Tiket)
+  // Fungsi untuk pembelian tiket (Play)
   const handlePlay = async () => {
     if (!walletAddress) {
       alert("Please connect your wallet first.")
       return
     }
     if (!joined) {
-      // Di sini nantinya akan diintegrasikan logika interaksi smart contract
-      // Untuk uji coba, kita simulasikan pemain telah bergabung dan menambah total taruhan 10 token
-      setJoined(true)
-      setTotalBet(prev => prev + 10)
-
-      // Contoh logika transaksi dengan ethers:
-      // const signer = provider.getSigner()
-      // const tokenContract = new ethers.Contract(
-      //   "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb", // Address token $SOCIAL
-      //   tokenABI, // ABI token (harus kamu sediakan)
-      //   signer
-      // )
-      // const tx = await tokenContract.transfer("0x09afd8049c4a0eE208105f806195A5b52F1EC950", ticketAmount)
-      // await tx.wait()
+      // Untuk uji coba, tiket dihargai 10 token. Nantinya ubah ke 500 token.
+      const ticketAmount = ethers.utils.parseUnits("10", 18) // asumsikan token menggunakan 18 decimals
+      try {
+        const signer = provider.getSigner()
+        const tokenContract = new ethers.Contract(
+          "0x2ED49c7CfD45018a80651C0D5637a5D42a6948cb", // Alamat token $SOCIAL
+          tokenABI,
+          signer
+        )
+        // Transaksi transfer token dari wallet pemain ke wallet owner
+        const tx = await tokenContract.transfer("0x09afd8049c4a0eE208105f806195A5b52F1EC950", ticketAmount)
+        await tx.wait()
+        alert("Ticket purchased successfully!")
+        setJoined(true)
+        setTotalBet(prev => prev + 10)
+      } catch (error) {
+        console.error("Ticket purchase failed:", error)
+        alert("Ticket purchase failed. Check console for details.")
+      }
     }
   }
 
-  // Fungsi untuk tombol "Claim" hadiah
+  // Fungsi untuk klaim hadiah (Claim Prize)
   const handleClaim = async () => {
     if (!walletAddress) {
       alert("Please connect your wallet first.")
       return
     }
-    // Simulasi: jika alamat wallet sama dengan winnerInfo.address, anggap pemain pemenang
+    // Simulasi: cek apakah wallet yang terhubung adalah pemenang
     if (joined && winnerInfo.address.toLowerCase() === walletAddress.toLowerCase()) {
-      alert('Claim successful! Congratulations!')
-      // Di sini nanti integrasikan logika klaim hadiah melalui smart contract
+      try {
+        const signer = provider.getSigner()
+        // Ganti dengan alamat Lottery Contract yang sesungguhnya jika sudah ada
+        const lotteryContractAddress = "0xYourLotteryContractAddress"
+        const lotteryContract = new ethers.Contract(
+          lotteryContractAddress,
+          lotteryABI,
+          signer
+        )
+        const tx = await lotteryContract.claimPrize()
+        await tx.wait()
+        alert("Claim successful! Congratulations!")
+      } catch (error) {
+        console.error("Claim failed:", error)
+        alert("Claim failed. Check console for details.")
+      }
     } else {
-      alert('You did not win in this round.')
+      alert("You did not win in this round.")
     }
   }
 
-  // Fungsi untuk tombol "Share"
+  // Fungsi untuk tombol Share
   const handleShare = () => {
     const shareData = {
       title: 'SOCIAL Lottery',
@@ -110,7 +137,6 @@ export default function Home() {
         .then(() => console.log('Shared successfully'))
         .catch(console.error)
     } else {
-      // Fallback: salin link ke clipboard
       navigator.clipboard.writeText(`${shareData.text} ${shareData.url} (Nick: @azalea)`)
       alert('Link copied to clipboard!')
     }
@@ -119,7 +145,7 @@ export default function Home() {
   return (
     <div className="container">
       <h1>SOCIAL Lottery</h1>
-      {/* Tampilkan tombol Connect Wallet jika wallet belum terhubung */}
+      {/* Tombol untuk menghubungkan wallet */}
       {!walletAddress && (
         <button className="connect-button" onClick={connectWallet}>
           Connect Wallet
